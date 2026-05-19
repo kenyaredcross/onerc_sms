@@ -1,0 +1,52 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-05-13 21:21:08.067968",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "filter_field",
+  "operator",
+  "filter_value"
+ ],
+ "fields": [
+  {
+   "fieldname": "filter_field",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Filter Field",
+   "reqd": 1
+  },
+  {
+   "fieldname": "operator",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Operator",
+   "options": "\nequals\nnot equals\ncontains\ndoes not contain\ngreater than\nless than\nis set\nis not set",
+   "reqd": 1
+  },
+  {
+   "fieldname": "filter_value",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Filter Value",
+   "reqd": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-05-17 20:30:58.759807",
+ "modified_by": "Administrator",
+ "module": "Onerc Sms",
+ "name": "SMS Campaign Filter",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
