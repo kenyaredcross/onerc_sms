@@ -46,7 +46,7 @@
   },
   {
    "fieldname": "api_key",
-   "fieldtype": "Password",
+   "fieldtype": "Data",
    "label": "API Key"
   },
   {
@@ -69,7 +69,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-05-12 20:45:14.146648",
+ "modified": "2026-05-19 22:05:43.207687",
  "modified_by": "Administrator",
  "module": "Onerc Sms",
  "name": "SMS Provider",
