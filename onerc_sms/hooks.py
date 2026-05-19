@@ -258,3 +258,9 @@ scheduler_events = {
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
 
+fixtures = [
+    {"dt": "Workflow", "filters": [["name", "=", "SMS Campaign Approval"]]},
+    {"dt": "Workflow State", "filters": [["workflow_name", "=", "SMS Campaign Approval"]]},
+    {"dt": "Workflow Action Master", "filters": [["name", "in", ["Submit for Approval", "Approve", "Reject", "Resubmit"]]]},
+    {"dt": "Role", "filters": [["name", "in", ["SMS Campaign Manager", "SMS Campaign Approver"]]]}
+]
