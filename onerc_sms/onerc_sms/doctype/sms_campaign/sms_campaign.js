@@ -1,7 +1,7 @@
 frappe.ui.form.on("SMS Campaign", {
 
     refresh(frm) {
-        if (frm.doc.status === "Scheduled" || frm.doc.status === "Draft") {
+        if (frm.doc.docstatus === 1 && frm.doc.status === "Scheduled") {
             frm.add_custom_button("Send Now", () => {
                 frappe.confirm(
                     "Are you sure you want to send this campaign now?",
