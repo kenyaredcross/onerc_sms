@@ -5,6 +5,7 @@ from onerc_sms.utils.providers import get_active_provider, send_via_provider
 
 
 class SMSCampaign(Document):
+	# pass
 
     def validate(self):
         self.validate_message()
@@ -229,6 +230,7 @@ class SMSCampaign(Document):
     def render_messages(self, recipients):
         rendered = []
 
+
         for r in recipients:
             try:
                 message = frappe.render_template(self.message, r["context"])
@@ -269,7 +271,11 @@ class SMSCampaign(Document):
 
             total_cost += result["cost"]
 
-            self.append("delivery_log", {
+            log_entry = frappe.new_doc("SMS Campaign Log")
+            log_entry.update({
+                "parent": self.name,
+                "parenttype": self.doctype,
+                "parentfield": "delivery_log",
                 "phone_number": recipient["phone"],
                 "status": result["status"],
                 "status_code": result["status_code"],
@@ -278,11 +284,9 @@ class SMSCampaign(Document):
                 "error": result["error"],
                 "timestamp": now_datetime()
             })
+            log_entry.insert(ignore_permissions=True)
 
         self.db_set("total_sent", total_sent)
         self.db_set("total_failed", total_failed)
         self.db_set("total_cost", total_cost)
         self.db_set("status", "Sent" if total_failed == 0 else "Failed")
-
-        self.flags.ignore_validate_update_after_submit = True
-        self.save(ignore_permissions=True)
