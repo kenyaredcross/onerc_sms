@@ -61,230 +61,228 @@ class SMSCampaign(Document):
 
     def resolve_from_doctype(self):
         if not self.source_doctype or not self.phone_field:
-			return []
+            return []
 
-		filters = self.build_filters()
+        filters = self.build_filters()
 
-		records = frappe.get_all(
-			self.source_doctype,
-			filters=filters,
-			fields=["*"]
-		)
+        records = frappe.get_all(
+            self.source_doctype,
+            filters=filters,
+            fields=["*"]
+        )
 
-		recipients = []
+        recipients = []
 
-		for record in records:
-			phone = record.get(self.phone_field, "")
+        for record in records:
+            phone = record.get(self.phone_field, "")
 
-			if not phone:
-				continue
+            if not phone:
+                continue
 
-			phone = str(phone).strip()
+            phone = str(phone).strip()
 
-			if not phone.startswith("+"):
-				frappe.log_error(
-					f"Skipping {phone} in {self.source_doctype} - missing country code", 
-					"SMS Campaign: resolve from doctype"
-				)
-				continue
+            if not phone.startswith("+"):
+                frappe.log_error(
+                    f"Skipping {phone} in {self.source_doctype} — missing country code",
+                    "SMS Campaign"
+                )
+                continue
 
-			recipients.append({
-				"phone": phone, 
-				"context": record
-			})
+            recipients.append({
+                "phone": phone,
+                "context": record
+            })
 
-		return recipients
-	
-	def build_filters(self):
-		filters []
+        return recipients
 
-		operator_map = {
-			"equals": "=",
-			"not equals" = "!=",
-			"contains": "like",
-			"does not contain": "not like",
-			"greater than": ">",
-			"less than": "<",
-			"is set": "is",
-			"is not set": "is"
-		}
+    def build_filters(self):
+        filters = {}
 
-		for row in self.Campaign_filters:
-			operator = operator_map.get(row.operator, "=")
+        operator_map = {
+            "equals": "=",
+            "not equals": "!=",
+            "contains": "like",
+            "does not contain": "not like",
+            "greater than": ">",
+            "less than": "<",
+            "is set": "is",
+            "is not set": "is"
+        }
 
-			if row.operator == "contains":
-				value = f"%{row.filter_value}%"
-			elif row.operator == "does not contain":
-				value = f"%{row.filter_value}%"
-			elif row.operator == "is set":
-            	value = "set"
-			elif row.operator == "is not set":
-				value = "not set"
-			else:
-				value = row.filter_value
+        for row in self.campaign_filters:
+            operator = operator_map.get(row.operator, "=")
 
-			filters[row.filter_field] = [operator, value]
-		
-		return filters
+            if row.operator == "contains":
+                value = f"%{row.filter_value}%"
+            elif row.operator == "does not contain":
+                value = f"%{row.filter_value}%"
+            elif row.operator == "is set":
+                value = "set"
+            elif row.operator == "is not set":
+                value = "not set"
+            else:
+                value = row.filter_value
+
+            filters[row.filter_field] = [operator, value]
+
+        return filters
 
     def resolve_from_csv(self):
-        import CSV
-		import io
+        import csv
+        import io
 
-		if not self.csv_file:
-			return[]
+        if not self.csv_file:
+            return []
 
-		file_doc frappe.get_doc("File", {"file_url"}: self.csv_file)
-		file_content = file_doc.get_content()
+        file_doc = frappe.get_doc("File", {"file_url": self.csv_file})
+        file_content = file_doc.get_content()
 
-		if isinstance(file_content, bytes):
-			file_content = file_content.decode("utf-8")
+        if isinstance(file_content, bytes):
+            file_content = file_content.decode("utf-8")
 
-		reader = csv.DictReader(io.StringIO(file_content))
+        reader = csv.DictReader(io.StringIO(file_content))
 
-		if "phone_number" not in reader.fieldnames:
-			frappe.throw("CSV must have a column named phone_number")
+        if "phone_number" not in reader.fieldnames:
+            frappe.throw("CSV must have a column named phone_number")
 
-		recipients = []
+        recipients = []
 
-		for row in reader:
-			phone = row.get("phone_number", "").strip()
+        for row in reader:
+            phone = row.get("phone_number", "").strip()
 
-			if not phone:
-				continue
-			
-			if not phone.startswith("+"):
-				frappe.log_error(
-					f"Skipping {phone} - missing country code",
-					"SMS Campaign"
-				)
-				continue
+            if not phone:
+                continue
 
-			context = {k: v for k, v in row.items() if k != "phone_number"}
+            if not phone.startswith("+"):
+                frappe.log_error(
+                    f"Skipping {phone} — missing country code",
+                    "SMS Campaign"
+                )
+                continue
 
-			recipients.append({
-				"phone": phone,
-				"context": context
-			})
-		
-		return recipients
+            context = {k: v for k, v in row.items() if k != "phone_number"}
 
+            recipients.append({
+                "phone": phone,
+                "context": context
+            })
 
+        return recipients
 
     def resolve_from_manual(self):
         if not self.phone_numbers:
-			return []
+            return []
 
-		numbers = [
-			n.strip().replace(" ", "")
-			for n in self.phone_numbers.splitlines()
-			if n.strip()
-		]
+        numbers = [
+            n.strip()
+            for n in self.phone_numbers.splitlines()
+            if n.strip()
+        ]
 
-		recipients = []
+        recipients = []
 
-		for number in numbers:
-			if not number.startswith("+"):
-				frappe.log_error(
-					f"skipping {number} - missing country code", 
-					"SMS Campaign: resolve from manual"
-				)
+        for number in numbers:
+            if not number.startswith("+"):
+                frappe.log_error(
+                    f"Skipping {number} — missing country code",
+                    "SMS Campaign"
+                )
+                continue
 
-				continue
-			recipients.append({
-				"phone": number, 
-				"context": {}
-			})
+            recipients.append({
+                "phone": number,
+                "context": {}
+            })
 
-			return recipients
-		
+        return recipients
 
     def run_pipeline(self, recipients):
-		recipients = self.filter_opted_out(recipients)
-		recipients = self.deduplicate(recipients)
-		recipients = select.render_messages(recipients)
-		return recipients
-	
-	def filter_opted_out(self, recipients):
-		opted_out = frappe.db.get_all(
-			"SMS Opt Out",
-			fields=["phone_number"]
-		)
+        recipients = self.filter_opted_out(recipients)
+        recipients = self.deduplicate(recipients)
+        recipients = self.render_messages(recipients)
+        return recipients
 
-		opted_out_numbers = {row.phone_number for row in opted_out}
+    def filter_opted_out(self, recipients):
+        opted_out = frappe.db.get_all(
+            "SMS Opt-Out",
+            fields=["phone_number"]
+        )
 
-		return [
-			r for r in recipients
-			if r["phone"] not in opted_out_numbers
-		]
-	
-	def deduplicate(self, recipients):
-		seen = set()
-		unique = []
+        opted_out_numbers = {row.phone_number for row in opted_out}
 
-		for r in recipients:
-			if r["phone"] not in seen:
-				seen.add(r["phone"])
-				unique.append(r)
-		return unique
-	
-	def render_messages(self, recipients):
-		rendered = []
+        return [
+            r for r in recipients
+            if r["phone"] not in opted_out_numbers
+        ]
 
-		for r in recipients:
-			try:
-				message = frappe.render_template(self.message, r["context"])
-				rendered.append({
-					"phone": r["phone"],
-					"context": r["context"],
-					"message": message
-				})
-			except Exception as e:
-				frappe.log_error(
-					f"Failed to render message for {r["phone"]}: {str(e)}",
-					"SMS Campaign: render messages"
-				)
-				continue
-		
-		return rendered
+    def deduplicate(self, recipients):
+        seen = set()
+        unique = []
+
+        for r in recipients:
+            if r["phone"] not in seen:
+                seen.add(r["phone"])
+                unique.append(r)
+
+        return unique
+
+    def render_messages(self, recipients):
+        rendered = []
+
+        for r in recipients:
+            try:
+                message = frappe.render_template(self.message, r["context"])
+                rendered.append({
+                    "phone": r["phone"],
+                    "context": r["context"],
+                    "message": message
+                })
+            except Exception as e:
+                frappe.log_error(
+                    f"Failed to render message for {r['phone']}: {str(e)}",
+                    "SMS Campaign"
+                )
+                continue
+
+        return rendered
 
     def send_sms(self, recipients):
         provider = get_active_provider()
-    
-		total_sent = 0
-		total_failed = 0
-		total_cost = 0.0
 
-		self.db_set("total_recipients", len(recipients))
+        total_sent = 0
+        total_failed = 0
+        total_cost = 0.0
 
-		for recipient in recipients:
-			result = send_via_provider(
-				provider,
-				recipient["phone"],
-				recipient["message"]
-			)
+        self.db_set("total_recipients", len(recipients))
 
-			if result["status"] == "Success":
-				total_sent += 1
-			else:
-				total_failed += 1
+        for recipient in recipients:
+            result = send_via_provider(
+                provider,
+                recipient["phone"],
+                recipient["message"]
+            )
 
-			total_cost += result["cost"]
+            if result["status"] == "Success":
+                total_sent += 1
+            else:
+                total_failed += 1
 
-			self.append("delivery_log", {
-				"phone_number": recipient["phone"],
-				"status": result["status"],
-				"status_code": result["status_code"],
-				"cost": result["cost"],
-				"message_id": result["message_id"],
-				"error": result["error"],
-				"timestamp": now_datetime()
-			})
+            total_cost += result["cost"]
 
-		self.db_set("total_sent", total_sent)
-		self.db_set("total_failed", total_failed)
-		self.db_set("total_cost", total_cost)
-		self.db_set("status", "Sent" if total_failed == 0 else "Failed")
+            self.append("delivery_log", {
+                "phone_number": recipient["phone"],
+                "status": result["status"],
+                "status_code": result["status_code"],
+                "cost": result["cost"],
+                "message_id": result["message_id"],
+                "error": result["error"],
+                "timestamp": now_datetime()
+            })
 
-		self.flags.ignore_validate_update_after_submit = True
-		self.save(ignore_permissions=True)
+        self.db_set("total_sent", total_sent)
+        self.db_set("total_failed", total_failed)
+        self.db_set("total_cost", total_cost)
+        self.db_set("status", "Sent" if total_failed == 0 else "Failed")
+
+        self.flags.ignore_validate_update_after_submit = True
+        self.save(ignore_permissions=True)
