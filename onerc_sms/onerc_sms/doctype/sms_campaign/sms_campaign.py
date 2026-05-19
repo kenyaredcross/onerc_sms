@@ -1,6 +1,7 @@
 import frappe
 from frappe.model.document import Document
 from frappe.utils import now_datetime
+from onerc_sms.utils.providers import get_active_provider, send_via_provider
 
 
 class SMSCampaign(Document):
@@ -248,4 +249,42 @@ class SMSCampaign(Document):
 		return rendered
 
     def send_sms(self, recipients):
-        pass
+        provider = get_active_provider()
+    
+		total_sent = 0
+		total_failed = 0
+		total_cost = 0.0
+
+		self.db_set("total_recipients", len(recipients))
+
+		for recipient in recipients:
+			result = send_via_provider(
+				provider,
+				recipient["phone"],
+				recipient["message"]
+			)
+
+			if result["status"] == "Success":
+				total_sent += 1
+			else:
+				total_failed += 1
+
+			total_cost += result["cost"]
+
+			self.append("delivery_log", {
+				"phone_number": recipient["phone"],
+				"status": result["status"],
+				"status_code": result["status_code"],
+				"cost": result["cost"],
+				"message_id": result["message_id"],
+				"error": result["error"],
+				"timestamp": now_datetime()
+			})
+
+		self.db_set("total_sent", total_sent)
+		self.db_set("total_failed", total_failed)
+		self.db_set("total_cost", total_cost)
+		self.db_set("status", "Sent" if total_failed == 0 else "Failed")
+
+		self.flags.ignore_validate_update_after_submit = True
+		self.save(ignore_permissions=True)
