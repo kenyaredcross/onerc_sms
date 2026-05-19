@@ -2,7 +2,7 @@ import frappe
 from frappe.model.document import Document
 
 
-class OnercSMSSettings(Document):
+class OneRCSMSSettings(Document):
 
     def validate(self):
         self.validate_quiet_hours()

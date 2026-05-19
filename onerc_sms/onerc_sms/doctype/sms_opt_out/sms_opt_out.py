@@ -13,7 +13,7 @@ class SMSOptOut(Document):
             frappe.throw(f"Phone number {self.phone_number} must include a country code e.g. +254")
 
     def check_duplicate(self):
-        existing = frappe.db.exists("SMS Opt-Out", {"phone_number": self.phone_number, "name": ["!=", self.name]})
+        existing = frappe.db.exists("SMS Opt Out", {"phone_number": self.phone_number, "name": ["!=", self.name]})
 
         if existing:
             frappe.throw(f"{self.phone_number} is already on the opt-out list.")

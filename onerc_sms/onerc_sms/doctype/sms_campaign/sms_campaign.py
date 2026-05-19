@@ -204,7 +204,7 @@ class SMSCampaign(Document):
 
     def filter_opted_out(self, recipients):
         opted_out = frappe.db.get_all(
-            "SMS Opt-Out",
+            "SMS Opt Out",
             fields=["phone_number"]
         )
 
