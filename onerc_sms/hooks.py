@@ -161,6 +161,14 @@ required_apps = ["onerc_core"]
 # 	],
 # }
 
+scheduler_events = {
+    "cron": {
+        "*/5 * * * *": [
+            "onerc_sms.utils.tasks.process_scheduled_campaigns"
+        ]
+    }
+}
+
 # Testing
 # -------
 
