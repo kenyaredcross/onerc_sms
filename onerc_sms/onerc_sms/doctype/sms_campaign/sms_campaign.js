@@ -17,7 +17,35 @@ frappe.ui.form.on("SMS Campaign", {
                     }
                 );
             });
-        }
+        }; 
+        frm.add_custom_button("Preview", () => {
+
+            if (frm.doc.__islocal || frm.is_dirty()){
+                frappe.msgprint("Please save the campaign first before previewing");
+                return;
+            }
+            
+            frappe.call({
+                method: "onerc_sms.api.campaign.preview_campaign",
+                args: { campaign: frm.doc.name },
+                callback: (r) => {
+                    if (!r.message) return;
+
+                    let data = r.message;
+                    let html = `<p><b>Total recipients: ${data.total}</b></p><hr>`;
+
+                    data.preview.forEach(p => {
+                        html += `<p><b>${p.phone}</b><br>${p.message}</p><hr>`;
+                    });
+
+                    frappe.msgprint({
+                        title: "Campaign Preview",
+                        message: html,
+                        wide: true
+                    });
+                }
+            });
+        });
     },
 
     source_doctype(frm) {
