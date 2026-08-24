@@ -15,9 +15,10 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import add_to_date
 
+from onerc_sms.api.campaign import get_filter_values
 from onerc_sms.onerc_sms.doctype.sms_campaign import filters
 from onerc_sms.onerc_sms.doctype.sms_campaign.sms_campaign import SMSCampaign
-from onerc_sms.api.campaign import get_filter_values
+from onerc_sms.setup import workflow
 
 EXTRA_TEST_RECORD_DEPENDENCIES = []
 IGNORE_TEST_RECORD_DEPENDENCIES = []
@@ -47,6 +48,28 @@ class TestCampaignScheduling(IntegrationTestCase):
 			campaign.on_submit()
 
 		db_set.assert_called_once_with("status", "Scheduled")
+
+
+class TestLegacyWorkflowRemoval(IntegrationTestCase):
+	def test_the_old_workflow_is_deleted_when_present(self):
+		with (
+			patch.object(frappe.db, "exists", return_value=True),
+			patch.object(frappe, "delete_doc") as delete_doc,
+		):
+			workflow.remove()
+
+		delete_doc.assert_called_once_with(
+			"Workflow", workflow.WORKFLOW, force=True, ignore_permissions=True
+		)
+
+	def test_removal_is_idempotent(self):
+		with (
+			patch.object(frappe.db, "exists", return_value=False),
+			patch.object(frappe, "delete_doc") as delete_doc,
+		):
+			workflow.remove()
+
+		delete_doc.assert_not_called()
 
 
 class TestFilterValueSuggestions(IntegrationTestCase):

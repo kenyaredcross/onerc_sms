@@ -88,11 +88,11 @@ required_apps = ["onerc_core"]
 # before_install = "onerc_sms.install.before_install"
 # after_install = "onerc_sms.install.after_install"
 
-# Runs after every migrate, not only the first install, so a site that
-# already had this app before the approval workflow existed still gets it —
-# the same reason vmmsx.staff.services.permissions.install runs from here.
-# Idempotent: see onerc_sms/setup/workflow.py.
-after_migrate = "onerc_sms.setup.workflow.install"
+# SMS campaigns use ordinary DocType submit permission. Earlier releases
+# installed a native approval workflow whose Approved state remained a draft;
+# an active workflow then hid Frappe's Submit button and made sending
+# impossible. Remove that legacy workflow on every migrate, idempotently.
+after_migrate = "onerc_sms.setup.workflow.remove"
 
 # Uninstallation
 # ------------
@@ -265,8 +265,5 @@ scheduler_events = {
 # ignore_translatable_strings_from = []
 
 fixtures = [
-    {"dt": "Workflow", "filters": [["name", "=", "SMS Campaign Approval"]]},
-    {"dt": "Workflow State", "filters": [["workflow_name", "=", "SMS Campaign Approval"]]},
-    {"dt": "Workflow Action Master", "filters": [["name", "in", ["Submit for Approval", "Approve", "Reject", "Resubmit"]]]},
-    {"dt": "Role", "filters": [["name", "in", ["SMS Campaign Manager", "SMS Campaign Approver"]]]}
+    {"dt": "Role", "filters": [["name", "=", "SMS Campaign Manager"]]}
 ]

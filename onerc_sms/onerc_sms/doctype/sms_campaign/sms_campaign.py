@@ -18,7 +18,6 @@ class SMSCampaign(Document):
         self.validate_message()
         self.validate_source()
         self.validate_filters()
-        self.validate_approval()
 
     def validate_filters(self):
         # Caught while the form is open, not at send time: a filter naming a
@@ -29,19 +28,6 @@ class SMSCampaign(Document):
             return
 
         campaign_filters.validate(self.source_doctype, self.campaign_filters)
-
-    def validate_approval(self):
-        # Only the native Submit button reaches docstatus 1 — checked here
-        # rather than in on_submit() because validate() is what runs first and
-        # a rejection here leaves the document exactly as the user left it.
-        if self.docstatus != 1:
-            return
-
-        if not frappe.db.exists("Workflow", {"document_type": self.doctype, "is_active": 1}):
-            return
-
-        if self.workflow_state != "Approved":
-            frappe.throw("This campaign must be approved before it can be submitted.")
 
     def on_submit(self):
         # Datetime fields submitted by the Desk arrive from JSON as strings.
