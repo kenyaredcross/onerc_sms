@@ -1,7 +1,14 @@
 import frappe
 from frappe.model.document import Document
 from frappe.utils import now_datetime
-from onerc_sms.utils.providers import get_active_provider, send_via_provider
+
+from onerc_sms.onerc_sms.doctype.sms_campaign import filters as campaign_filters
+from onerc_sms.utils.providers import (
+    STATUS_SUCCESS,
+    ensure_ready,
+    get_active_provider,
+    send_via_provider,
+)
 
 
 class SMSCampaign(Document):
@@ -10,6 +17,31 @@ class SMSCampaign(Document):
     def validate(self):
         self.validate_message()
         self.validate_source()
+        self.validate_filters()
+        self.validate_approval()
+
+    def validate_filters(self):
+        # Caught while the form is open, not at send time: a filter naming a
+        # field that is not on the source doctype is a typo somebody can fix in
+        # a second now, and a half-sent campaign with a raw SQL error in the log
+        # later.
+        if self.source_type != "Doctype Query":
+            return
+
+        campaign_filters.validate(self.source_doctype, self.campaign_filters)
+
+    def validate_approval(self):
+        # Only the native Submit button reaches docstatus 1 — checked here
+        # rather than in on_submit() because validate() is what runs first and
+        # a rejection here leaves the document exactly as the user left it.
+        if self.docstatus != 1:
+            return
+
+        if not frappe.db.exists("Workflow", {"document_type": self.doctype, "is_active": 1}):
+            return
+
+        if self.workflow_state != "Approved":
+            frappe.throw("This campaign must be approved before it can be submitted.")
 
     def on_submit(self):
         if self.scheduled_at <= now_datetime():
@@ -39,6 +71,13 @@ class SMSCampaign(Document):
             frappe.throw("Please enter phone numbers.")
 
     def send_campaign(self):
+        # Asked before anything is written. A missing credential or an
+        # uninstalled gateway library would otherwise leave the campaign stuck
+        # at Sending with a delivery log full of one identical error — and
+        # `ensure_ready` says exactly which field to fill in.
+        provider = get_active_provider()
+        ensure_ready(provider)
+
         self.db_set("status", "Sending")
 
         recipients = self.resolve_contacts()
@@ -48,7 +87,7 @@ class SMSCampaign(Document):
             self.db_set("status", "Failed")
             frappe.throw("No valid recipients found after filtering.")
 
-        self.send_sms(recipients)
+        self.send_sms(recipients, provider)
 
     def resolve_contacts(self):
         if self.source_type == "Doctype Query":
@@ -65,17 +104,31 @@ class SMSCampaign(Document):
             return []
 
         filters = self.build_filters()
+        target_field, link_field = self._split_phone_field()
 
-        records = frappe.get_all(
+        # get_list, not get_all: get_all always ignores permissions, which
+        # skipped onerc_core's geo-scoping hook entirely and let a campaign
+        # against e.g. VMMS Volunteer resolve nationwide regardless of who
+        # built it. Resolved as the campaign's owner rather than
+        # frappe.session.user, because a scheduled campaign is dispatched by
+        # process_scheduled_campaigns() — a cron job with no coordinator in
+        # session — and it must still reach only the area its creator holds.
+        records = frappe.get_list(
             self.source_doctype,
             filters=filters,
-            fields=["*"]
+            fields=["*"],
+            user=self.owner,
         )
+
+        linked_phones = self._resolve_linked_phones(records, link_field, target_field) if link_field else {}
 
         recipients = []
 
         for record in records:
-            phone = record.get(self.phone_field, "")
+            if link_field:
+                phone = linked_phones.get(record.get(link_field), "")
+            else:
+                phone = record.get(target_field, "")
 
             if not phone:
                 continue
@@ -96,37 +149,59 @@ class SMSCampaign(Document):
 
         return recipients
 
+    def _split_phone_field(self):
+        """('phone', None) for a plain field on source_doctype, or
+        ('phone', 'red_profile') for a dotted phone_field naming a Link field
+        on source_doctype and the field to read on the other end of it.
+
+        Volunteers and members carry no phone field of their own — it lives on
+        the linked Red Profile — so a dotted phone_field is how this campaign
+        reaches it live rather than trusting a mirrored copy.
+        """
+        if "." not in self.phone_field:
+            return self.phone_field, None
+
+        link_field, target_field = self.phone_field.split(".", 1)
+        field = frappe.get_meta(self.source_doctype).get_field(link_field)
+
+        if not field or field.fieldtype != "Link":
+            frappe.throw(f"{link_field} is not a Link field on {self.source_doctype}.")
+
+        return target_field, link_field
+
+    def _resolve_linked_phones(self, records, link_field, target_field):
+        """One phone per distinct linked row, fetched once rather than once
+        per recipient.
+
+        Read with ignore_permissions=True — the same argument
+        vmmsx.notifications.services.audience makes for its own reads off Red
+        Profile: geo scoping already ran on `records` above, so this only
+        projects one more field off rows already inside it and grants no one
+        access to a row they could not already reach.
+        """
+        link_doctype = frappe.get_meta(self.source_doctype).get_field(link_field).options
+        names = sorted({record.get(link_field) for record in records if record.get(link_field)})
+
+        if not names:
+            return {}
+
+        rows = frappe.get_all(
+            link_doctype,
+            filters={"name": ["in", names]},
+            fields=["name", target_field],
+            ignore_permissions=True,
+        )
+
+        return {row.name: row.get(target_field) for row in rows}
+
     def build_filters(self):
-        filters = {}
+        """The campaign's filter rows, as a Frappe query filter.
 
-        operator_map = {
-            "equals": "=",
-            "not equals": "!=",
-            "contains": "like",
-            "does not contain": "not like",
-            "greater than": ">",
-            "less than": "<",
-            "is set": "is",
-            "is not set": "is"
-        }
-
-        for row in self.campaign_filters:
-            operator = operator_map.get(row.operator, "=")
-
-            if row.operator == "contains":
-                value = f"%{row.filter_value}%"
-            elif row.operator == "does not contain":
-                value = f"%{row.filter_value}%"
-            elif row.operator == "is set":
-                value = "set"
-            elif row.operator == "is not set":
-                value = "not set"
-            else:
-                value = row.filter_value
-
-            filters[row.filter_field] = [operator, value]
-
-        return filters
+        A list of triples rather than a dict — see `filters.py` for why the dict
+        this used to build silently dropped every filter row but the last one on
+        any given field.
+        """
+        return campaign_filters.build(self.campaign_filters)
 
     def resolve_from_csv(self):
         import csv
@@ -248,8 +323,13 @@ class SMSCampaign(Document):
 
         return rendered
 
-    def send_sms(self, recipients):
-        provider = get_active_provider()
+    def send_sms(self, recipients, provider=None):
+        # The provider is passed in by `send_campaign`, which already ran
+        # `ensure_ready` against it. Resolved here only for a caller that went
+        # straight to this method.
+        if provider is None:
+            provider = get_active_provider()
+            ensure_ready(provider)
 
         total_sent = 0
         total_failed = 0
@@ -264,7 +344,7 @@ class SMSCampaign(Document):
                 recipient["message"]
             )
 
-            if result["status"] == "Success":
+            if result["status"] == STATUS_SUCCESS:
                 total_sent += 1
             else:
                 total_failed += 1

@@ -9,6 +9,14 @@ readme = "README.md"
 dynamic = ["version"]
 dependencies = [
     # "frappe~=16.0.0" # Installed and managed by bench.
+    #
+    # The gateway SDKs are hard dependencies, not extras, so that
+    # `bench get-app` installs them and bringing a society online is only ever
+    # "paste the credentials into an SMS Provider row". An adapter whose SDK is
+    # missing is the one failure mode an operator cannot diagnose from the desk,
+    # and it is not worth saving a few megabytes to keep it possible.
+    "africastalking~=2.0.3",
+    "twilio>=9.0.0,<10.0.0",
 ]
 
 [build-system]

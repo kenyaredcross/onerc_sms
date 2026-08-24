@@ -14,26 +14,33 @@
   "api_key",
   "sender_id",
   "extra_configuration_section",
-  "extra_config"
+  "extra_config",
+  "readiness_section",
+  "readiness"
  ],
  "fields": [
   {
    "fieldname": "provider_name",
    "fieldtype": "Data",
    "label": "Provider Name",
-   "unique": 1
+   "unique": 1,
+   "reqd": 1,
+   "description": "Your own name for this gateway, e.g. Africa's Talking (Live)."
   },
   {
    "fieldname": "adapter",
    "fieldtype": "Select",
    "label": "Adapter",
-   "options": "\nAfrica's Talking\nTwilio\nCustom"
+   "options": "\nAfrica's Talking\nTwilio\nCustom",
+   "reqd": 1,
+   "description": "Which gateway this record's credentials belong to. Pick this first \u2014 the three fields opposite are relabelled to match."
   },
   {
    "default": "0",
    "fieldname": "is_active",
    "fieldtype": "Check",
-   "label": "Is Active"
+   "label": "Is Active",
+   "description": "The one provider campaigns send through. Ticking this unticks every other provider."
   },
   {
    "fieldname": "column_break_vhob",
@@ -42,17 +49,19 @@
   {
    "fieldname": "username",
    "fieldtype": "Data",
-   "label": "Username/ Account SID"
+   "label": "Username / Account SID",
+   "reqd": 1
   },
   {
    "fieldname": "api_key",
-   "fieldtype": "Data",
-   "label": "API Key"
+   "fieldtype": "Password",
+   "label": "API Key / Auth Token",
+   "reqd": 1
   },
   {
    "fieldname": "sender_id",
    "fieldtype": "Data",
-   "label": "Sender ID"
+   "label": "Sender ID / From Number"
   },
   {
    "fieldname": "extra_configuration_section",
@@ -63,13 +72,24 @@
    "fieldname": "extra_config",
    "fieldtype": "Code",
    "label": "Extra Config",
-   "options": "JSON"
+   "options": "JSON",
+   "description": "Reserved for gateway-specific options. Nothing reads this yet."
+  },
+  {
+   "fieldname": "readiness_section",
+   "fieldtype": "Section Break",
+   "label": "Status"
+  },
+  {
+   "fieldname": "readiness",
+   "fieldtype": "HTML",
+   "label": "Readiness"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-05-19 22:05:43.207687",
+ "modified": "2026-08-24 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Onerc Sms",
  "name": "SMS Provider",

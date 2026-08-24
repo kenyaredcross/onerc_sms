@@ -88,6 +88,12 @@ required_apps = ["onerc_core"]
 # before_install = "onerc_sms.install.before_install"
 # after_install = "onerc_sms.install.after_install"
 
+# Runs after every migrate, not only the first install, so a site that
+# already had this app before the approval workflow existed still gets it —
+# the same reason vmmsx.staff.services.permissions.install runs from here.
+# Idempotent: see onerc_sms/setup/workflow.py.
+after_migrate = "onerc_sms.setup.workflow.install"
+
 # Uninstallation
 # ------------
 

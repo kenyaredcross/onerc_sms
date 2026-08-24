@@ -1,6 +1,10 @@
 [pre_model_sync]
 # Patches added in this section will be executed before doctypes are migrated
 # Read docs to understand patches: https://docs.frappe.io/framework/user/en/database-migrations
+# Runs BEFORE the schema sync on purpose: it reads the API key while `api_key`
+# is still an ordinary column and moves it into encrypted storage. Ordered the
+# other way round, the schema change gets there first.
+onerc_sms.patches.encrypt_provider_api_keys
 
 [post_model_sync]
 # Patches added in this section will be executed after doctypes are migrated
