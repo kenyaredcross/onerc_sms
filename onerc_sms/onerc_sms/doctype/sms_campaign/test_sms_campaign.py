@@ -9,10 +9,14 @@ against the wrong audience -- so the translation from grid rows to a query
 filter is worth pinning down row by row.
 """
 
+from unittest.mock import patch
+
 import frappe
 from frappe.tests import IntegrationTestCase
+from frappe.utils import add_to_date
 
 from onerc_sms.onerc_sms.doctype.sms_campaign import filters
+from onerc_sms.onerc_sms.doctype.sms_campaign.sms_campaign import SMSCampaign
 
 EXTRA_TEST_RECORD_DEPENDENCIES = []
 IGNORE_TEST_RECORD_DEPENDENCIES = []
@@ -27,6 +31,21 @@ class IntegrationTestSMSCampaign(IntegrationTestCase):
 	"""Integration tests for SMSCampaign."""
 
 	pass
+
+
+class TestCampaignScheduling(IntegrationTestCase):
+	def test_a_datetime_string_from_the_desk_can_be_compared_on_submit(self):
+		campaign = SMSCampaign(
+			{
+				"doctype": "SMS Campaign",
+				"scheduled_at": str(add_to_date(None, days=1)),
+			}
+		)
+
+		with patch.object(campaign, "db_set") as db_set:
+			campaign.on_submit()
+
+		db_set.assert_called_once_with("status", "Scheduled")
 
 
 class TestFilterRowsBecomeAQueryFilter(IntegrationTestCase):

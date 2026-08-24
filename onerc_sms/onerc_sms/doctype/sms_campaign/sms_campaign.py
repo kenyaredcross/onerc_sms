@@ -1,6 +1,6 @@
 import frappe
 from frappe.model.document import Document
-from frappe.utils import now_datetime
+from frappe.utils import get_datetime, now_datetime
 
 from onerc_sms.onerc_sms.doctype.sms_campaign import filters as campaign_filters
 from onerc_sms.utils.providers import (
@@ -44,7 +44,10 @@ class SMSCampaign(Document):
             frappe.throw("This campaign must be approved before it can be submitted.")
 
     def on_submit(self):
-        if self.scheduled_at <= now_datetime():
+        # Datetime fields submitted by the Desk arrive from JSON as strings.
+        # Normalise before comparing; Python cannot order that wire value
+        # against the datetime returned by now_datetime().
+        if get_datetime(self.scheduled_at) <= now_datetime():
             self.send_campaign()
         else:
             self.db_set("status", "Scheduled")
