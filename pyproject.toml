@@ -23,6 +23,23 @@ dependencies = [
 requires = ["flit_core >=3.4,<4"]
 build-backend = "flit_core.buildapi"
 
+# Which Frappe this app is built against. Its absence is what made the install
+# fail with "Could not find a compatible Frappe version in pyproject.toml".
+#
+# **Deliberately wider than `onerc_core` and `vmmsx`, which both say
+# `>=16.0.0,<17.0.0`.** Bench compares with `semantic_version`, not PEP 440, and
+# under those rules a prerelease is outside a range that does not mention one:
+#
+#     Version("17.0.0-dev") in SimpleSpec(">=16.0.0,<17.0.0")   -> False
+#     Version("17.0.0-dev") in SimpleSpec(">=16.0.0,<18.0.0")   -> True
+#
+# The bench this was built and tested on runs `17.0.0-dev`, so the narrower
+# range would refuse the very environment the app works in. `<18.0.0` accepts
+# v16 stable, the v17 line and that dev build, and still refuses v15 — which
+# this app genuinely does not support, since it needs Python 3.14.
+[tool.bench.frappe-dependencies]
+frappe = ">=16.0.0,<17.0.0"
+
 # These dependencies are only installed when developer mode is enabled
 [tool.bench.dev-dependencies]
 # package_name = "~=1.1.0"
