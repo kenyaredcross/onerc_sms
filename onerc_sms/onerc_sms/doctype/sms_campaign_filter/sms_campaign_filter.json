@@ -32,7 +32,7 @@
   },
   {
    "fieldname": "filter_value",
-   "fieldtype": "Data",
+   "fieldtype": "Autocomplete",
    "in_list_view": 1,
    "label": "Value",
    "reqd": 0,

@@ -120,6 +120,36 @@ frappe.ui.form.on("SMS Campaign", {
 		});
 	},
 
+	load_filter_values(frm, row) {
+		const grid = frm.fields_dict.campaign_filters && frm.fields_dict.campaign_filters.grid;
+
+		if (!grid || !frm.doc.source_doctype || !row || !row.filter_field) return;
+
+		frm.__filter_values = frm.__filter_values || {};
+		const cache_key = `${frm.doc.source_doctype}:${row.filter_field}`;
+
+		const apply = (result) => {
+			grid.update_docfield_property("filter_value", "options", result.values || []);
+			const grid_row = grid.grid_rows_by_docname && grid.grid_rows_by_docname[row.name];
+			if (grid_row) grid_row.refresh_field("filter_value");
+		};
+
+		if (frm.__filter_values[cache_key]) {
+			apply(frm.__filter_values[cache_key]);
+			return;
+		}
+
+		frappe.call({
+			method: "onerc_sms.api.campaign.get_filter_values",
+			args: { doctype: frm.doc.source_doctype, fieldname: row.filter_field },
+			callback: (r) => {
+				if (!r.message) return;
+				frm.__filter_values[cache_key] = r.message;
+				apply(r.message);
+			},
+		});
+	},
+
 	detect_phone_field(frm) {
 		if (!frm.doc.source_doctype) return;
 
@@ -173,5 +203,15 @@ frappe.ui.form.on("SMS Campaign Filter", {
 	// A row added before the options landed would render an empty picker.
 	campaign_filters_add(frm) {
 		frm.trigger("load_filter_fields");
+	},
+
+	filter_field(frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		frappe.model.set_value(cdt, cdn, "filter_value", "");
+		frm.events.load_filter_values(frm, row);
+	},
+
+	form_render(frm, cdt, cdn) {
+		frm.events.load_filter_values(frm, locals[cdt][cdn]);
 	},
 });

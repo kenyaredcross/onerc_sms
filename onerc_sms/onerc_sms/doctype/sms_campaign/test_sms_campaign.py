@@ -17,6 +17,7 @@ from frappe.utils import add_to_date
 
 from onerc_sms.onerc_sms.doctype.sms_campaign import filters
 from onerc_sms.onerc_sms.doctype.sms_campaign.sms_campaign import SMSCampaign
+from onerc_sms.api.campaign import get_filter_values
 
 EXTRA_TEST_RECORD_DEPENDENCIES = []
 IGNORE_TEST_RECORD_DEPENDENCIES = []
@@ -46,6 +47,18 @@ class TestCampaignScheduling(IntegrationTestCase):
 			campaign.on_submit()
 
 		db_set.assert_called_once_with("status", "Scheduled")
+
+
+class TestFilterValueSuggestions(IntegrationTestCase):
+	def test_a_select_field_offers_its_configured_values(self):
+		result = get_filter_values("SMS Campaign", "status")
+
+		self.assertIn({"value": "Draft", "label": "Draft"}, result["values"])
+		self.assertIn({"value": "Scheduled", "label": "Scheduled"}, result["values"])
+
+	def test_an_unknown_field_is_refused(self):
+		with self.assertRaises(frappe.ValidationError):
+			get_filter_values("SMS Campaign", "not_a_real_field")
 
 
 class TestFilterRowsBecomeAQueryFilter(IntegrationTestCase):

@@ -16,7 +16,7 @@ society's credit. Neither is something to leave open.
 
 import frappe
 from frappe import _
-from frappe.model import default_fields, no_value_fields
+from frappe.model import default_fields, no_value_fields, optional_fields
 
 CAMPAIGN_DOCTYPE = "SMS Campaign"
 
@@ -27,6 +27,10 @@ PHONE_FIELDTYPES = ("Data", "Phone")
 #: How many of a campaign's recipients the preview shows. Enough to see that the
 #: template rendered, not enough to be a way of exporting the audience.
 PREVIEW_SAMPLE = 3
+
+# Enough to make an ordinary branch/status/category field useful without
+# turning the campaign builder into an unbounded export of a source doctype.
+FILTER_VALUE_LIMIT = 100
 
 
 @frappe.whitelist()
@@ -101,6 +105,49 @@ def get_filter_fields(doctype):
 	fields.sort(key=lambda field: field["label"].lower())
 
 	return fields
+
+
+@frappe.whitelist()
+def get_filter_values(doctype: str, fieldname: str) -> dict:
+	"""Suggestions for one filter field, under the caller's source permissions.
+
+	Select fields return their configured vocabulary even when a choice has not
+	yet appeared in a record. Every other value-bearing field returns the first
+	100 distinct values the caller can actually read through ``frappe.get_list``.
+	That last detail is the access control: onerc_core's geo query condition and
+	the source doctype's ordinary read permission run exactly as they do when the
+	campaign itself resolves its audience.
+	"""
+	frappe.has_permission(CAMPAIGN_DOCTYPE, ptype="read", throw=True)
+
+	meta = frappe.get_meta(doctype)
+	field = meta.get_field(fieldname)
+	standard = fieldname in (set(default_fields) | set(optional_fields))
+
+	if not field and not standard:
+		frappe.throw(_("{0} is not a field on {1}.").format(frappe.bold(fieldname), frappe.bold(doctype)))
+
+	if field and field.fieldtype in no_value_fields:
+		frappe.throw(_("{0} does not hold a value that can be filtered.").format(frappe.bold(fieldname)))
+
+	if field and field.fieldtype == "Select":
+		values = [choice.strip() for choice in (field.options or "").split("\n") if choice.strip()]
+	else:
+		rows = frappe.get_list(
+			doctype,
+			fields=[fieldname],
+			filters=[[doctype, fieldname, "is", "set"]],
+			group_by=fieldname,
+			order_by=f"{fieldname} asc",
+			limit_page_length=FILTER_VALUE_LIMIT,
+		)
+		values = [str(row.get(fieldname)) for row in rows if row.get(fieldname) not in (None, "")]
+
+	return {
+		"fieldtype": field.fieldtype if field else "Data",
+		"values": [{"value": value, "label": value} for value in values],
+		"truncated": len(values) == FILTER_VALUE_LIMIT,
+	}
 
 
 def _describe(field) -> str:
