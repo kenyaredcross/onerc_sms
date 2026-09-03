@@ -18,6 +18,8 @@ import frappe
 from frappe import _
 from frappe.model import default_fields, no_value_fields, optional_fields
 
+from onerc_sms.onerc_sms.doctype.sms_campaign.filters import operators_for
+
 CAMPAIGN_DOCTYPE = "SMS Campaign"
 
 #: Field types that can hold a phone number. `Phone` is the obvious one; `Data`
@@ -31,6 +33,22 @@ PREVIEW_SAMPLE = 3
 # Enough to make an ordinary branch/status/category field useful without
 # turning the campaign builder into an unbounded export of a source doctype.
 FILTER_VALUE_LIMIT = 100
+
+#: What the columns every doctype has actually hold. `Meta.fields` never
+#: mentions them, so there is nowhere else to read this from, and without it
+#: "everybody enrolled since the flood" -- a filter on `creation` -- would be
+#: offered Like and In rather than the date comparisons it needs.
+_STANDARD_FIELDTYPES = {
+	"creation": "Datetime",
+	"modified": "Datetime",
+	"owner": "Link",
+	"modified_by": "Link",
+	"docstatus": "Int",
+	"parent": "Data",
+	"parentfield": "Data",
+	"parenttype": "Data",
+	"name": "Data",
+}
 
 
 @frappe.whitelist()
@@ -91,13 +109,21 @@ def get_filter_fields(doctype):
 			"value": field.fieldname,
 			"label": field.label or field.fieldname,
 			"description": _describe(field),
+			# Carried so the grid can shape the rest of the row the moment a
+			# field is picked, rather than after a second round trip.
+			"fieldtype": field.fieldtype,
 		}
 		for field in meta.fields
 		if field.fieldtype not in no_value_fields and field.fieldname
 	]
 
 	fields += [
-		{"value": name, "label": name, "description": _("standard field")}
+		{
+			"value": name,
+			"label": name,
+			"description": _("standard field"),
+			"fieldtype": _STANDARD_FIELDTYPES.get(name, "Data"),
+		}
 		for name in default_fields
 		if name not in ("doctype", "idx")
 	]
@@ -130,8 +156,20 @@ def get_filter_values(doctype: str, fieldname: str) -> dict:
 	if field and field.fieldtype in no_value_fields:
 		frappe.throw(_("{0} does not hold a value that can be filtered.").format(frappe.bold(fieldname)))
 
-	if field and field.fieldtype == "Select":
-		values = [choice.strip() for choice in (field.options or "").split("\n") if choice.strip()]
+	fieldtype = field.fieldtype if field else _STANDARD_FIELDTYPES.get(fieldname, "Data")
+
+	if fieldtype == "Check":
+		# Stored as 0/1, which is not what anybody would type. The grid shows the
+		# words and sends the digit.
+		choices = [{"value": "1", "label": _("Yes")}, {"value": "0", "label": _("No")}]
+	elif fieldtype == "Select":
+		choices = [
+			{"value": choice.strip(), "label": choice.strip()}
+			for choice in (field.options or "").split("\n")
+			if choice.strip()
+		]
+	elif fieldtype == "Link" and field and field.options:
+		choices = _linked_records(field.options)
 	else:
 		rows = frappe.get_list(
 			doctype,
@@ -141,13 +179,71 @@ def get_filter_values(doctype: str, fieldname: str) -> dict:
 			order_by=f"{fieldname} asc",
 			limit_page_length=FILTER_VALUE_LIMIT,
 		)
-		values = [str(row.get(fieldname)) for row in rows if row.get(fieldname) not in (None, "")]
+		choices = [
+			{"value": str(row.get(fieldname)), "label": str(row.get(fieldname))}
+			for row in rows
+			if row.get(fieldname) not in (None, "")
+		]
 
 	return {
-		"fieldtype": field.fieldtype if field else "Data",
-		"values": [{"value": value, "label": value} for value in values],
-		"truncated": len(values) == FILTER_VALUE_LIMIT,
+		"fieldtype": fieldtype,
+		# The shortlist this field can actually be asked about. Sent with the
+		# values rather than worked out on the form, so the vocabulary the grid
+		# offers and the one `filters.validate` accepts are the same list.
+		"operators": operators_for(fieldtype),
+		"values": choices,
+		"truncated": len(choices) == FILTER_VALUE_LIMIT,
 	}
+
+
+def _linked_records(target: str) -> list[dict]:
+	"""The records a Link field may point at, named the way a person reads them.
+
+	**Read from the target doctype, not from the values already used.** Asking
+	the source for its distinct `geo_node` values answers "which branches has
+	somebody already been filed under", which is not the question: a campaign is
+	very often the first thing addressed to a branch, and a picker that could
+	only offer branches with existing records would have nothing to say on the
+	day it mattered. This is also what the desk's own Link filter does.
+
+	Labelled by the target's title field where it has one, because `GEO-00042`
+	is not a branch anybody can pick from a list. `frappe.get_list` applies the
+	target's own read permission, so a coordinator is offered the branches they
+	may see and no others.
+	"""
+	try:
+		meta = frappe.get_meta(target)
+	except frappe.DoesNotExistError:
+		return []
+
+	title = meta.get_title_field()
+	# `get_title_field` falls back to "name", and asking for it twice makes the
+	# query invalid as well as pointless.
+	fields = ["name"] + ([title] if title and title != "name" else [])
+
+	try:
+		rows = frappe.get_list(
+			target,
+			fields=fields,
+			order_by=f"{title or 'name'} asc",
+			limit_page_length=FILTER_VALUE_LIMIT,
+		)
+	except frappe.PermissionError:
+		# Somebody who may build a campaign but may not read the target doctype
+		# gets an empty picker rather than an error page; the field can still be
+		# filtered by typing a value.
+		return []
+
+	choices = []
+
+	for row in rows:
+		name = row.get("name")
+		label = row.get(title) if title else None
+		choices.append(
+			{"value": name, "label": f"{label} ({name})" if label and label != name else name}
+		)
+
+	return choices
 
 
 def _describe(field) -> str:

@@ -15,7 +15,7 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import add_to_date
 
-from onerc_sms.api.campaign import get_filter_values
+from onerc_sms.api.campaign import get_filter_fields, get_filter_values
 from onerc_sms.onerc_sms.doctype.sms_campaign import filters
 from onerc_sms.onerc_sms.doctype.sms_campaign.sms_campaign import SMSCampaign
 from onerc_sms.setup import workflow
@@ -82,6 +82,103 @@ class TestFilterValueSuggestions(IntegrationTestCase):
 	def test_an_unknown_field_is_refused(self):
 		with self.assertRaises(frappe.ValidationError):
 			get_filter_values("SMS Campaign", "not_a_real_field")
+
+	def test_a_checkbox_offers_words_and_sends_the_digit(self):
+		# No Check field on SMS Campaign itself; User's `enabled` is the nearest
+		# one every site has.
+		result = get_filter_values("User", "enabled")
+
+		self.assertEqual(
+			[choice["label"] for choice in result["values"]], ["Yes", "No"]
+		)
+		self.assertEqual([choice["value"] for choice in result["values"]], ["1", "0"])
+
+	def test_a_link_field_offers_the_records_it_points_at(self):
+		"""Read from the target doctype, not from values already in use.
+
+		A campaign is often the first thing addressed to a branch, so a picker
+		built from the source's existing values would be empty exactly when it
+		was needed.
+		"""
+		template = frappe.get_doc(
+			{
+				"doctype": "SMS Template",
+				"template_name": frappe.generate_hash(length=8),
+				"message": "Hello",
+			}
+		).insert(ignore_permissions=True)
+
+		result = get_filter_values("SMS Campaign", "template")
+
+		self.assertEqual(result["fieldtype"], "Link")
+		self.assertIn(template.name, [choice["value"] for choice in result["values"]])
+
+
+class TestOperatorsFollowTheField(IntegrationTestCase):
+	"""The grid offers what the field can actually be asked, and nothing else.
+
+	Offering all thirteen for everything is how a coordinator builds a row that
+	resolves to nobody -- a date that is *Like* something, a checkbox *Between*
+	two values -- with nothing to warn them.
+	"""
+
+	def test_a_date_is_compared_and_not_matched(self):
+		operators = filters.operators_for("Datetime")
+
+		self.assertIn("Between", operators)
+		self.assertIn(">=", operators)
+		self.assertNotIn("Like", operators)
+
+	def test_a_checkbox_is_only_set_or_not(self):
+		self.assertEqual(filters.operators_for("Check"), ["Equals", "Not Equals"])
+
+	def test_a_closed_vocabulary_is_named_not_matched(self):
+		for fieldtype in ("Select", "Link"):
+			with self.subTest(fieldtype=fieldtype):
+				operators = filters.operators_for(fieldtype)
+
+				self.assertIn("In", operators)
+				self.assertNotIn("Like", operators)
+				self.assertNotIn("Between", operators)
+
+	def test_free_text_is_the_default_for_anything_unlisted(self):
+		# A fieldtype this app has not met is far likelier to be text than a
+		# number, and Like is the question people ask of text.
+		self.assertIn("Like", filters.operators_for("Data"))
+		self.assertIn("Like", filters.operators_for("Some Future Fieldtype"))
+		self.assertIn("Like", filters.operators_for(None))
+
+	def test_every_operator_offered_is_one_the_builder_can_resolve(self):
+		"""The shortlist and the validator must not drift apart.
+
+		The grid narrows the column to whatever `operators_for` returns; if that
+		list ever names something `OPERATORS` does not, the form offers a row it
+		then refuses to save.
+		"""
+		for fieldtype in [*filters.OPERATORS_BY_FIELDTYPE, "Data", None]:
+			for operator in filters.operators_for(fieldtype):
+				with self.subTest(fieldtype=fieldtype, operator=operator):
+					self.assertIn(operator.lower(), filters.OPERATORS)
+
+	def test_the_shortlist_reaches_the_form_with_the_values(self):
+		# One round trip, not two: the grid shapes the whole row the moment a
+		# field is picked.
+		result = get_filter_values("SMS Campaign", "scheduled_at")
+
+		self.assertEqual(result["operators"], filters.operators_for(result["fieldtype"]))
+
+	def test_a_standard_column_is_typed_so_dates_compare(self):
+		"""`creation` is the one everybody filters on and `Meta.fields` never
+		mentions it, so its type has to be stated somewhere."""
+		fields = {field["value"]: field for field in get_filter_fields("SMS Campaign")}
+
+		self.assertEqual(fields["creation"]["fieldtype"], "Datetime")
+		self.assertIn("Between", get_filter_values("SMS Campaign", "creation")["operators"])
+
+	def test_the_picker_carries_the_type_of_every_field(self):
+		for field in get_filter_fields("SMS Campaign"):
+			with self.subTest(field=field["value"]):
+				self.assertTrue(field.get("fieldtype"))
 
 
 class TestFilterRowsBecomeAQueryFilter(IntegrationTestCase):

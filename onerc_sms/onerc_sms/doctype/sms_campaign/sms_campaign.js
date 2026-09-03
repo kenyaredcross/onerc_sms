@@ -120,6 +120,18 @@ frappe.ui.form.on("SMS Campaign", {
 		});
 	},
 
+	// What the chosen field turns the rest of the row into: the operators worth
+	// offering for what it holds, and the values it can be compared against.
+	//
+	// **Applied to one row, not to the grid.** `grid.update_docfield_property`
+	// writes the property onto every row at once, which is right for the Field
+	// column -- every row names a field on the same source doctype -- and wrong
+	// for these two. A campaign filtering *branch is Arusha* and *enrolled after
+	// January* has one row wanting a list of branches and the other wanting date
+	// comparisons, and setting either grid-wide gave whichever row was touched
+	// last the say over both. Each grid row carries its own docfield copy (see
+	// `grid_row.set_docfields`), and writing to that copy is how the desk itself
+	// drives a column that differs per row.
 	load_filter_values(frm, row) {
 		const grid = frm.fields_dict.campaign_filters && frm.fields_dict.campaign_filters.grid;
 
@@ -129,9 +141,43 @@ frappe.ui.form.on("SMS Campaign", {
 		const cache_key = `${frm.doc.source_doctype}:${row.filter_field}`;
 
 		const apply = (result) => {
-			grid.update_docfield_property("filter_value", "options", result.values || []);
 			const grid_row = grid.grid_rows_by_docname && grid.grid_rows_by_docname[row.name];
-			if (grid_row) grid_row.refresh_field("filter_value");
+
+			if (!grid_row || !grid_row.docfields) return;
+
+			const docfield = (fieldname) =>
+				grid_row.docfields.find((field) => field.fieldname === fieldname);
+
+			const operator = docfield("operator");
+			const value = docfield("filter_value");
+
+			if (operator && (result.operators || []).length) {
+				// A Select's options are a newline-joined string, and the blank
+				// first line is what lets a row sit unanswered rather than
+				// silently meaning whatever happens to be first.
+				operator.options = ["", ...result.operators].join("\n");
+
+				// The operator already on the row may not be one this field can
+				// be asked. Left alone it would fail validation on save with a
+				// message about a row the person has stopped looking at.
+				if (row.operator && !result.operators.includes(row.operator)) {
+					frappe.model.set_value(row.doctype, row.name, "operator", result.operators[0]);
+				}
+			}
+
+			if (value) {
+				value.options = result.values || [];
+				// Said on the row rather than in the column description, because
+				// a hundred branches and all of them are different situations.
+				value.description = result.truncated
+					? __("Showing the first {0}. Type a value if it is not listed.", [
+							(result.values || []).length,
+					  ])
+					: null;
+			}
+
+			grid_row.refresh_field("operator");
+			grid_row.refresh_field("filter_value");
 		};
 
 		if (frm.__filter_values[cache_key]) {
@@ -207,8 +253,22 @@ frappe.ui.form.on("SMS Campaign Filter", {
 
 	filter_field(frm, cdt, cdn) {
 		const row = locals[cdt][cdn];
+		// The old value named something on the old field. Keeping it would leave
+		// a row that reads as answered and filters on nothing.
 		frappe.model.set_value(cdt, cdn, "filter_value", "");
 		frm.events.load_filter_values(frm, row);
+	},
+
+	// Is Set and Is Not Set answer from the field alone -- see VALUELESS in
+	// filters.py. A value left behind from a previous operator is ignored by the
+	// query and confusing on the form, so it goes when the question stops
+	// needing one.
+	operator(frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+
+		if (["Is Set", "Is Not Set"].includes(row.operator) && row.filter_value) {
+			frappe.model.set_value(cdt, cdn, "filter_value", "");
+		}
 	},
 
 	form_render(frm, cdt, cdn) {

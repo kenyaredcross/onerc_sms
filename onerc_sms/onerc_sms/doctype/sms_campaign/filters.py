@@ -61,6 +61,55 @@ OPERATORS = {
 #: these, and the grid stops asking for one.
 VALUELESS = {"is set", "is not set"}
 
+#: What a person may ask of a field, given what the field holds.
+#:
+#: **The grid used to offer all thirteen for everything.** Asking whether a date
+#: is *Like* something, or whether a checkbox is *Between* two values, are not
+#: questions with answers -- they are rows that resolve to nothing and silently
+#: narrow a campaign's audience to zero. The desk's own filter control has never
+#: offered them, and a coordinator who has filtered a list there arrives here
+#: expecting the same shortlist.
+#:
+#: Ordered most-used first rather than alphabetically, because the first entry
+#: is what a new row defaults to and equality is nearly always what was meant.
+_PRESENCE = ["Is Set", "Is Not Set"]
+_ORDERED = ["Equals", "Not Equals", ">", "<", ">=", "<=", "Between"] + _PRESENCE
+_TEXTUAL = ["Equals", "Not Equals", "Like", "Not Like", "In", "Not In"] + _PRESENCE
+#: A closed vocabulary: there is nothing to match a substring of, so Like is
+#: absent and In is the way to name several at once.
+_CHOICE = ["Equals", "Not Equals", "In", "Not In"] + _PRESENCE
+#: A checkbox is set or it is not. Everything else collapses to those two.
+_BOOLEAN = ["Equals", "Not Equals"]
+
+OPERATORS_BY_FIELDTYPE = {
+	"Check": _BOOLEAN,
+	"Int": _ORDERED,
+	"Float": _ORDERED,
+	"Currency": _ORDERED,
+	"Percent": _ORDERED,
+	"Rating": _ORDERED,
+	"Duration": _ORDERED,
+	"Date": _ORDERED,
+	"Datetime": _ORDERED,
+	"Time": _ORDERED,
+	"Select": _CHOICE,
+	"Link": _CHOICE,
+	"Dynamic Link": _CHOICE,
+	"Autocomplete": _CHOICE,
+	"Table MultiSelect": _CHOICE,
+}
+
+
+def operators_for(fieldtype: str | None) -> list[str]:
+	"""The operators worth offering for a field of this type.
+
+	Anything unlisted is treated as free text, which is the honest default: a
+	Data, Phone, Email, Small Text or Read Only field all take the same
+	questions, and a fieldtype this app has not met is far more likely to be one
+	of those than a number.
+	"""
+	return OPERATORS_BY_FIELDTYPE.get(fieldtype or "", _TEXTUAL)
+
 #: Operators whose value is a list rather than a scalar, entered comma-separated.
 LIST_VALUED = {"in", "not in", "between"}
 
